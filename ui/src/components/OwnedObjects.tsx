@@ -14,6 +14,7 @@ import {
   TextField,
   Badge,
   Tabs,
+  Select,
 } from "@radix-ui/themes";
 import { useState } from "react";
 import { useNetworkVariable } from "../networkConfig";
@@ -21,6 +22,7 @@ import { Hero } from "../types/hero";
 import { transferHero } from "../utility/helpers/transfer_hero";
 import { listHero } from "../utility/marketplace/list_hero";
 import { createArena } from "../utility/arena/create_arena";
+import { fuseHero } from "../utility/heroes/fuse_hero";
 import { RefreshProps } from "../types/props";
 
 export function OwnedObjects({ refreshKey, setRefreshKey }: RefreshProps) {
@@ -37,6 +39,12 @@ export function OwnedObjects({ refreshKey, setRefreshKey }: RefreshProps) {
   const [isListing, setIsListing] = useState<{ [key: string]: boolean }>({});
   const [isCreatingBattle, setIsCreatingBattle] = useState<{
     [key: string]: boolean;
+  }>({});
+  const [isFusing, setIsFusing] = useState<{
+    [key: string]: boolean;
+  }>({});
+  const [selectedHeroForFusion, setSelectedHeroForFusion] = useState<{
+    [key: string]: string;
   }>({});
   const [copiedStates, setCopiedStates] = useState<{ [key: string]: boolean }>(
     {},
@@ -157,6 +165,35 @@ export function OwnedObjects({ refreshKey, setRefreshKey }: RefreshProps) {
     );
   };
 
+  const handleFuse = (hero1Id: string, hero2Id: string) => {
+    if (!packageId || !hero2Id) return;
+
+    setIsFusing((prev) => ({ ...prev, [hero1Id]: true }));
+
+    const tx = fuseHero(packageId, hero1Id, hero2Id);
+    signAndExecute(
+      { transaction: tx },
+      {
+        onSuccess: async ({ digest }) => {
+          await suiClient.waitForTransaction({
+            digest,
+            options: {
+              showEffects: true,
+              showObjectChanges: true,
+            },
+          });
+
+          setSelectedHeroForFusion((prev) => ({ ...prev, [hero1Id]: "" }));
+          setRefreshKey(refreshKey + 1);
+          setIsFusing((prev) => ({ ...prev, [hero1Id]: false }));
+        },
+        onError: () => {
+          setIsFusing((prev) => ({ ...prev, [hero1Id]: false }));
+        },
+      },
+    );
+  };
+
   if (!account) {
     return (
       <Card>
@@ -251,6 +288,7 @@ export function OwnedObjects({ refreshKey, setRefreshKey }: RefreshProps) {
                       <Tabs.Trigger value="transfer">Transfer</Tabs.Trigger>
                       <Tabs.Trigger value="list">List for Sale</Tabs.Trigger>
                       <Tabs.Trigger value="battle">Battle</Tabs.Trigger>
+                      <Tabs.Trigger value="fuse">Fuse</Tabs.Trigger>
                     </Tabs.List>
 
                     <Tabs.Content value="transfer">
@@ -324,6 +362,82 @@ export function OwnedObjects({ refreshKey, setRefreshKey }: RefreshProps) {
                           {isCreatingBattle[heroId]
                             ? "Creating Arena..."
                             : "Create Arena"}
+                        </Button>
+                      </Flex>
+                    </Tabs.Content>
+
+                    <Tabs.Content value="fuse">
+                      <Flex direction="column" gap="2" mt="3">
+                        <Text size="2" color="gray">
+                          Fuse this hero with another to create a stronger hero.
+                          Both heroes will be consumed, and you'll receive a new
+                          fused hero with combined power.
+                        </Text>
+                        <Text size="1" color="orange" weight="bold">
+                          ⚠️ Warning: Both heroes will be destroyed!
+                        </Text>
+                        <Select.Root
+                          value={selectedHeroForFusion[heroId] || ""}
+                          onValueChange={(value) =>
+                            setSelectedHeroForFusion((prev) => ({
+                              ...prev,
+                              [heroId]: value,
+                            }))
+                          }
+                        >
+                          <Select.Trigger
+                            placeholder="Select hero to fuse with..."
+                            disabled={heroes.length < 2}
+                          />
+                          <Select.Content>
+                            {heroes
+                              .filter((h) => h.data?.objectId !== heroId)
+                              .map((heroObj) => {
+                                const heroContent = heroObj.data?.content as any;
+                                const otherHeroId = heroObj.data?.objectId!;
+                                const otherHeroFields =
+                                  heroContent.fields as Hero;
+                                return (
+                                  <Select.Item
+                                    key={otherHeroId}
+                                    value={otherHeroId}
+                                  >
+                                    {otherHeroFields.name} (Power:{" "}
+                                    {otherHeroFields.power})
+                                  </Select.Item>
+                                );
+                              })}
+                          </Select.Content>
+                        </Select.Root>
+                        {selectedHeroForFusion[heroId] && (
+                          <Text size="2" color="blue">
+                            New Power:{" "}
+                            {Number(fields.power) +
+                              Number(
+                                (heroes.find(
+                                  (h) =>
+                                    h.data?.objectId ===
+                                    selectedHeroForFusion[heroId]
+                                )?.data?.content as any)?.fields?.power || 0
+                              )}
+                          </Text>
+                        )}
+                        <Button
+                          onClick={() =>
+                            handleFuse(
+                              heroId,
+                              selectedHeroForFusion[heroId]
+                            )
+                          }
+                          disabled={
+                            !selectedHeroForFusion[heroId] ||
+                            isFusing[heroId] ||
+                            heroes.length < 2
+                          }
+                          loading={isFusing[heroId]}
+                          color="purple"
+                        >
+                          {isFusing[heroId] ? "Fusing Heroes..." : "Fuse Heroes"}
                         </Button>
                       </Flex>
                     </Tabs.Content>
