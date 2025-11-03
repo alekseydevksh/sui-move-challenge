@@ -1,5 +1,7 @@
 # Move Project
 
+## 🚀 [Live Demo](https://alekseydevksh.github.io/sui-move-challenge/) • ✨ Experience the Hero NFT Marketplace & Battle Arena
+
 ## 🔧 Development
 
 ### Local Development
